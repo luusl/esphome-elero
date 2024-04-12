@@ -11,32 +11,6 @@
 namespace esphome {
 namespace elero {
 
-static const uint8_t ELERO_COMMAND_COVER_CONTROL = 0x6a;
-static const uint8_t ELERO_COMMAND_COVER_CHECK = 0x00;
-static const uint8_t ELERO_COMMAND_COVER_STOP = 0x10;
-static const uint8_t ELERO_COMMAND_COVER_UP = 0x20;
-static const uint8_t ELERO_COMMAND_COVER_TILT = 0x24;
-static const uint8_t ELERO_COMMAND_COVER_DOWN = 0x40;
-static const uint8_t ELERO_COMMAND_COVER_INT = 0x44;
-
-static const uint8_t ELERO_STATE_UNKNOWN = 0x00;
-static const uint8_t ELERO_STATE_TOP = 0x01;
-static const uint8_t ELERO_STATE_BOTTOM = 0x02;
-static const uint8_t ELERO_STATE_INTERMEDIATE = 0x03;
-static const uint8_t ELERO_STATE_TILT =0x04;
-static const uint8_t ELERO_STATE_BLOCKING = 0x05;
-static const uint8_t ELERO_STATE_OVERHEATED = 0x06;
-static const uint8_t ELERO_STATE_TIMEOUT = 0x07;
-static const uint8_t ELERO_STATE_START_MOVING_UP = 0x08;
-static const uint8_t ELERO_STATE_START_MOVING_DOWN = 0x09;
-static const uint8_t ELERO_STATE_MOVING_UP = 0x0a;
-static const uint8_t ELERO_STATE_MOVING_DOWN = 0x0b;
-static const uint8_t ELERO_STATE_STOPPED = 0x0d;
-static const uint8_t ELERO_STATE_TOP_TILT = 0x0e;
-static const uint8_t ELERO_STATE_BOTTOM_TILT = 0x0f;
-static const uint8_t ELERO_STATE_OFF = 0x0f;
-static const uint8_t ELERO_STATE_ON = 0x10;
-
 static const uint32_t ELERO_POLL_INTERVAL_MOVING = 2000;  // poll every two seconds while moving
 static const uint32_t ELERO_DELAY_SEND_PACKETS = 50; // 50ms send delay between repeats
 static const uint32_t ELERO_TIMEOUT_MOVEMENT = 120000; // poll for up to two minutes while moving
@@ -100,7 +74,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void decode_nibbles(uint8_t* msg, uint8_t len);
   void msg_decode(uint8_t *msg);
   void msg_encode(uint8_t* msg);
- 
+  std::string resolve_addr(uint32_t addr) const;
  
   bool received_{false};
   uint8_t msg_rx_[CC1101_FIFO_LENGTH];

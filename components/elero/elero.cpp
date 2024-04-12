@@ -16,7 +16,7 @@ void Elero::loop() {
     this->received_ = false;
     uint8_t len = this->read_status(CC1101_RXBYTES);
     if(len & 0x7F && !(len & 0x80)) { // No overflow and bytes available
-      if(len > 64) {
+      if(len > CC1101_FIFO_LENGTH) {
         ESP_LOGD(TAG, "Received more bytes than FIFO length - wtf?");
       } else {
         this->read_buf(CC1101_RXFIFO, this->msg_rx_, len);
@@ -387,6 +387,17 @@ void Elero::msg_encode(uint8_t* msg) {
   encode_nibbles(msg);
 }
 
+std::string Elero::resolve_addr(uint32_t addr) const
+{
+  if (auto it{address_to_cover_mapping_.find(addr)}; it != address_to_cover_mapping_.cend())
+  {
+    return it->second->get_name();
+  }
+  char buff[100];
+  snprintf(buff, sizeof(buff), "0x%06x", addr);
+  return buff;
+}
+
 void Elero::interprete_msg() {
   uint8_t length = this->msg_rx_[0];
   uint8_t cnt = this->msg_rx_[1];
@@ -419,7 +430,12 @@ void Elero::interprete_msg() {
     rssi = (float)((this->msg_rx_[length+1])/2-74);
   uint8_t *payload = &this->msg_rx_[19 + dests_len];
   msg_decode(payload);
-  ESP_LOGD(TAG, "len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=%02x, syst=%02x, chl=%02d, src=0x%06x, bwd=0x%06x, fwd=0x%06x, #dst=%02d, dst=%06x, rssi=%2.1f, lqi=%2d, crc=%2d, payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]", length, cnt, typ, typ2, hop, syst, chl, src, bwd, fwd, num_dests, dst, rssi, lqi, crc, payload1, payload2, payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7]);
+  ESP_LOGD(TAG, "len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=%02x, syst=%02x, chl=%02d, src=%s, bwd=%s, fwd=%s, "
+                "#dst=%02d, dst=%s, rssi=%2.1f, lqi=%2d, crc=%2d, "
+                "payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]",
+           length, cnt, typ, typ2, hop, syst, chl, resolve_addr(src).c_str(), resolve_addr(bwd).c_str(),
+           resolve_addr(fwd).c_str(), num_dests, resolve_addr(dst).c_str(), rssi, lqi, crc, payload1, payload2,
+           payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7]);
 
   if((typ == 0xca) || (typ == 0xc9)) { // Status message from a blind
     // Check if we know the blind
@@ -434,7 +450,8 @@ void Elero::interprete_msg() {
 void Elero::register_cover(EleroCover *cover) {
   uint32_t address = cover->get_blind_address();
   if(this->address_to_cover_mapping_.find(address) != this->address_to_cover_mapping_.end()) {
-    ESP_LOGE(TAG, "A blind with this address is already registered - this is currently not supported");
+    ESP_LOGE(TAG, "%s: A blind with this address (0x%06x) is already registered - this is currently not supported",
+             cover->get_name().c_str(), address);
     return;
   }
   this->address_to_cover_mapping_.insert({address, cover});
