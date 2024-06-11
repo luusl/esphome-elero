@@ -11,6 +11,8 @@
 namespace esphome {
 namespace elero {
 
+static const uint8_t ELERO_MAX_PACKET_SIZE = 57; // according to FCC documents
+
 static const uint32_t ELERO_POLL_INTERVAL_MOVING = 2000;  // poll every two seconds while moving
 static const uint32_t ELERO_DELAY_SEND_PACKETS = 50; // 50ms send delay between repeats
 static const uint32_t ELERO_TIMEOUT_MOVEMENT = 120000; // poll for up to two minutes while moving
@@ -49,12 +51,13 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   bool wait_rx();
   bool wait_tx();
   bool wait_tx_done();
+  bool wait_idle();
   bool transmit();
   uint8_t read_reg(uint8_t addr);
   uint8_t read_status(uint8_t addr);
   void read_buf(uint8_t addr, uint8_t *buf, uint8_t len);
   void flush_and_rx();
-  void interprete_msg();
+  void interpret_msg();
   void register_cover(EleroCover *cover);
   bool send_command(t_elero_command *cmd);
   
