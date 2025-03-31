@@ -11,9 +11,8 @@ static const uint8_t flash_table_encode[] = {0x08, 0x02, 0x0d, 0x01, 0x0f, 0x0e,
 static const uint8_t flash_table_decode[] = {0x0a, 0x03, 0x01, 0x0c, 0x0d, 0x07, 0x0f, 0x06, 0x00, 0x08, 0x0b, 0x0e, 0x09, 0x02, 0x05, 0x04};
 
 void Elero::loop() {
-  if(this->received_) {
+  if (this->received_.exchange(false)) {
     ESP_LOGVV(TAG, "loop says \"received\"");
-    this->received_ = false;
     uint8_t len = this->read_status(CC1101_RXBYTES);
     if(len & 0x7F) { // bytes available
       if((len & 0x7F) > CC1101_FIFO_LENGTH) {
@@ -34,11 +33,11 @@ void Elero::loop() {
   }
 }
 
-void IRAM_ATTR Elero::interrupt(Elero *arg) {
+IRAM_ATTR void Elero::interrupt(Elero *arg) {
   arg->set_received();
 }
 
-void IRAM_ATTR Elero::set_received() {
+IRAM_ATTR void Elero::set_received() {
   this->received_ = true;
 }
 
@@ -499,26 +498,37 @@ bool Elero::send_command(t_elero_command *cmd) {
   this->msg_tx_[6] = cmd->channel; // channel
   this->msg_tx_[7] = ((cmd->remote_addr >> 16) & 0xff); // source address
   this->msg_tx_[8] = ((cmd->remote_addr >> 8) & 0xff);
-  this->msg_tx_[9] =((cmd->remote_addr) & 0xff);
+  this->msg_tx_[9] = ((cmd->remote_addr) & 0xff);
   this->msg_tx_[10] = ((cmd->remote_addr >> 16) & 0xff); // backward address
   this->msg_tx_[11] = ((cmd->remote_addr >> 8) & 0xff);
-  this->msg_tx_[12] =((cmd->remote_addr) & 0xff);
+  this->msg_tx_[12] = ((cmd->remote_addr) & 0xff);
   this->msg_tx_[13] = ((cmd->remote_addr >> 16) & 0xff); // forward address
   this->msg_tx_[14] = ((cmd->remote_addr >> 8) & 0xff);
-  this->msg_tx_[15] =((cmd->remote_addr) & 0xff);
+  this->msg_tx_[15] = ((cmd->remote_addr) & 0xff);
   this->msg_tx_[16] = 0x01; // destination count
   this->msg_tx_[17] = ((cmd->blind_addr >> 16) & 0xff); // blind address
   this->msg_tx_[18] = ((cmd->blind_addr >> 8) & 0xff);
   this->msg_tx_[19] = ((cmd->blind_addr) & 0xff);
-  for(int i=0; i<10; i++)
-    this->msg_tx_[20 + i] = cmd->payload[i];
+  this->msg_tx_[20] = cmd->payload[0];
+  this->msg_tx_[21] = cmd->payload[1];
   this->msg_tx_[22] = ((code >> 8) & 0xff);
   this->msg_tx_[23] = (code & 0xff);
+  this->msg_tx_[24] = cmd->command;
+  for (size_t i = 25; i <= this->msg_tx_[0]; i++) {
+    this->msg_tx_[i] = 0x00;
+  }
+  msg_encode(&this->msg_tx_[22]);
 
-  uint8_t *payload = &this->msg_tx_[22];
-  msg_encode(payload);
-
-  ESP_LOGV(TAG, "send: len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=%02x, syst=%02x, chl=%02d, src=0x%02x%02x%02x, bwd=0x%02x%02x%02x, fwd=0x%02x%02x%02x, #dst=%02d, dst=0x%02x%02x%02x, payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]", this->msg_tx_[0], this->msg_tx_[1], this->msg_tx_[2], this->msg_tx_[3], this->msg_tx_[4], this->msg_tx_[5], this->msg_tx_[6], this->msg_tx_[7], this->msg_tx_[8], this->msg_tx_[9], this->msg_tx_[10], this->msg_tx_[11], this->msg_tx_[12], this->msg_tx_[13], this->msg_tx_[14], this->msg_tx_[15], this->msg_tx_[16], this->msg_tx_[17], this->msg_tx_[18], this->msg_tx_[19], this->msg_tx_[20], this->msg_tx_[21], this->msg_tx_[22], this->msg_tx_[23], this->msg_tx_[24], this->msg_tx_[25], this->msg_tx_[26], this->msg_tx_[27], this->msg_tx_[28], this->msg_tx_[29]);
+  ESP_LOGV(TAG,
+           "send: len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=0x%02x, syst=0x%02x, chl=%02d, src=0x%02x%02x%02x, "
+           "bwd=0x%02x%02x%02x, fwd=0x%02x%02x%02x, #dst=%02d, dst=0x%02x%02x%02x, payload=[0x%02x 0x%02x 0x%02x "
+           "0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]",
+           this->msg_tx_[0], this->msg_tx_[1], this->msg_tx_[2], this->msg_tx_[3], this->msg_tx_[4], this->msg_tx_[5],
+           this->msg_tx_[6], this->msg_tx_[7], this->msg_tx_[8], this->msg_tx_[9], this->msg_tx_[10], this->msg_tx_[11],
+           this->msg_tx_[12], this->msg_tx_[13], this->msg_tx_[14], this->msg_tx_[15], this->msg_tx_[16],
+           this->msg_tx_[17], this->msg_tx_[18], this->msg_tx_[19], this->msg_tx_[20], this->msg_tx_[21],
+           this->msg_tx_[22], this->msg_tx_[23], this->msg_tx_[24], this->msg_tx_[25], this->msg_tx_[26],
+           this->msg_tx_[27], this->msg_tx_[28], this->msg_tx_[29]);
   return transmit();
 }
 

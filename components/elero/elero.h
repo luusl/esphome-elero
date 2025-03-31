@@ -27,7 +27,8 @@ typedef struct {
   uint8_t channel;
   uint8_t pck_inf[2];
   uint8_t hop;
-  uint8_t payload[10];
+  uint8_t payload[2];
+  uint8_t command;
 } t_elero_command;
 
 class EleroCover;
@@ -79,7 +80,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void msg_encode(uint8_t* msg);
   std::string resolve_addr(uint32_t addr) const;
  
-  bool received_{false};
+  std::atomic<bool> received_{false};
   uint8_t msg_rx_[CC1101_FIFO_LENGTH];
   uint8_t msg_tx_[CC1101_FIFO_LENGTH];
   uint8_t freq0_{0x7a};
