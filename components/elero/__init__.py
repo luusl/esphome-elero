@@ -10,6 +10,7 @@ elero_ns = cg.esphome_ns.namespace("elero")
 elero = elero_ns.class_("Elero", spi.SPIDevice, cg.Component)
 
 CONF_GDO0_PIN = "gdo0_pin"
+CONF_GDO2_PIN = "gdo2_pin"
 CONF_ELERO_ID = "elero_id"
 CONF_FREQ0 = "freq0"
 CONF_FREQ1 = "freq1"
@@ -20,6 +21,7 @@ CONFIG_SCHEMA = (
         {
             cv.GenerateID(): cv.declare_id(elero),
             cv.Required(CONF_GDO0_PIN): pins.gpio_input_pin_schema,
+            cv.Optional(CONF_GDO2_PIN): pins.gpio_input_pin_schema,
             cv.Optional(CONF_FREQ0, default=0x7a): cv.hex_int_range(min=0x0, max=0xff),
             cv.Optional(CONF_FREQ1, default=0x71): cv.hex_int_range(min=0x0, max=0xff),
             cv.Optional(CONF_FREQ2, default=0x21): cv.hex_int_range(min=0x0, max=0xff),
@@ -37,6 +39,9 @@ async def to_code(config):
 
     gdo0_pin = await cg.gpio_pin_expression(config[CONF_GDO0_PIN])
     cg.add(var.set_gdo0_pin(gdo0_pin))
+    if CONF_GDO2_PIN in config:
+        gdo2_pin = await cg.gpio_pin_expression(config[CONF_GDO2_PIN])
+        cg.add(var.set_gdo2_pin(gdo2_pin))
     cg.add(var.set_freq0(config[CONF_FREQ0]))
     cg.add(var.set_freq1(config[CONF_FREQ1]))
     cg.add(var.set_freq2(config[CONF_FREQ2]))

@@ -50,7 +50,16 @@ void Elero::setup() {
   this->spi_setup();
   this->gdo0_pin_->setup();
   this->gdo0_irq_pin_ = this->gdo0_pin_->to_isr();
+  if (this->gdo2_pin_)
+  {
+    this->gdo2_pin_->setup();
+    this->gdo2_irq_pin_ = this->gdo2_pin_->to_isr();
+    this->gdo2_pin_->attach_interrupt(Elero::interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+  }
+  else
+  {
   this->gdo0_pin_->attach_interrupt(Elero::interrupt, this, gpio::INTERRUPT_FALLING_EDGE);
+  }
   this->reset();
   this->init();
 }
