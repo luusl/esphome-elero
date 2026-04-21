@@ -4,6 +4,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/components/spi/spi.h"
 #include "esphome/components/elero/cc1101.h"
+#include <mutex>
 
 // All encryption/decryption structures copied from https://github.com/QuadCorei8085/elero_protocol/ (MIT)
 // All remote handling based on code from https://github.com/stanleypa/eleropy (GPLv3)
@@ -80,7 +81,10 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void msg_encode(uint8_t* msg);
   std::string resolve_addr(uint32_t addr) const;
  
-  std::atomic<bool> received_{false};
+ 
+  bool received_{false};
+  bool transmitting_{false};
+  uint32_t tx_start_time_{0};
   uint8_t msg_rx_[CC1101_FIFO_LENGTH];
   uint8_t msg_tx_[CC1101_FIFO_LENGTH];
   uint8_t freq0_{0x7a};
@@ -89,6 +93,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   InternalGPIOPin *gdo0_pin_{nullptr};
   ISRInternalGPIOPin gdo0_irq_pin_{nullptr};
   std::map<uint32_t, EleroCover*> address_to_cover_mapping_;
+  std::mutex radio_mutex_;
 };
 
 }  // namespace elero
