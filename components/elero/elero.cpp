@@ -16,7 +16,7 @@ void Elero::loop() {
     ESP_LOGW(TAG, "Transmission timeout detected, resetting radio state");
     this->transmitting_ = false;
   // Guard radio while flushing
-  std::lock_guard<std::mutex> lock(this->radio_mutex_);
+  LockGuard lock(this->radio_mutex_);
   this->flush_and_rx();
   }
   
@@ -25,7 +25,7 @@ void Elero::loop() {
     ESP_LOGVV(TAG, "loop says \"received\"");
     this->received_ = false;
   // Guard radio access while reading RX
-  std::lock_guard<std::mutex> lock(this->radio_mutex_);
+  LockGuard lock(this->radio_mutex_);
   uint8_t len = this->read_status(CC1101_RXBYTES);
     if(len & 0x7F) { // bytes available
       if((len & 0x7F) > CC1101_FIFO_LENGTH) {
@@ -539,7 +539,7 @@ bool Elero::send_command(t_elero_command *cmd) {
   ESP_LOGVV(TAG, "send_command called");
   
   // Lock the radio to prevent concurrent access
-  std::lock_guard<std::mutex> lock(this->radio_mutex_);
+  LockGuard lock(this->radio_mutex_);
   
   uint16_t code = (0x00 - (cmd->counter * 0x708f)) & 0xffff;
   this->msg_tx_[0] = 0x1d; // message length
