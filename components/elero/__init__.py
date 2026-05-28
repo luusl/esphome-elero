@@ -2,7 +2,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components import spi
-from esphome.const import CONF_ID
+from esphome.const import CONF_ID, CONF_ADDRESS, CONF_NAME
 
 DEPENDENCIES = ["spi"]
 
@@ -14,6 +14,15 @@ CONF_ELERO_ID = "elero_id"
 CONF_FREQ0 = "freq0"
 CONF_FREQ1 = "freq1"
 CONF_FREQ2 = "freq2"
+CONF_REMOTES = "remotes"
+
+REMOTE_SCHEMA = (
+    cv.ENTITY_BASE_SCHEMA.extend(
+        {
+            cv.Required(CONF_ADDRESS): cv.hex_int_range(min=0x0, max=0xffffff),
+        }
+    )
+)
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -23,6 +32,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_FREQ0, default=0x7a): cv.hex_int_range(min=0x0, max=0xff),
             cv.Optional(CONF_FREQ1, default=0x71): cv.hex_int_range(min=0x0, max=0xff),
             cv.Optional(CONF_FREQ2, default=0x21): cv.hex_int_range(min=0x0, max=0xff),
+            cv.Optional(CONF_REMOTES, default=[]): cv.ensure_list(REMOTE_SCHEMA),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -40,3 +50,5 @@ async def to_code(config):
     cg.add(var.set_freq0(config[CONF_FREQ0]))
     cg.add(var.set_freq1(config[CONF_FREQ1]))
     cg.add(var.set_freq2(config[CONF_FREQ2]))
+    for conf in config[CONF_REMOTES]:
+        cg.add(var.add_remote(conf[CONF_ADDRESS], conf[CONF_NAME]))

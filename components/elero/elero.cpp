@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 #include "esphome/components/elero/cover/EleroCover.h"
+#include <sstream>
 
 namespace esphome {
 namespace elero {
@@ -449,15 +450,16 @@ void Elero::msg_encode(uint8_t* msg) {
   encode_nibbles(msg);
 }
 
-std::string Elero::resolve_addr(uint32_t addr) const
-{
-  if (auto it{address_to_cover_mapping_.find(addr)}; it != address_to_cover_mapping_.cend())
-  {
-    return it->second->get_name();
+std::string Elero::resolve_addr(uint32_t addr) const {
+  std::stringstream stream;
+  if (auto it{this->address_to_cover_mapping_.find(addr)}; it != this->address_to_cover_mapping_.cend()) {
+    stream << it->second->get_name().c_str();
+  } else if (auto it{this->custom_remotes_mapping_.find(addr)}; it != custom_remotes_mapping_.cend()) {
+    stream << it->second.c_str();
+  } else {
+    stream << "0x" << std::hex << addr;
   }
-  char buff[100];
-  snprintf(buff, sizeof(buff), "0x%06x", addr);
-  return buff;
+  return stream.str();
 }
 
 void Elero::interpret_msg() {
@@ -505,12 +507,12 @@ void Elero::interpret_msg() {
     rssi = (float)((this->msg_rx_[length+1])/2-74);
   uint8_t *payload = &this->msg_rx_[19 + dests_len];
   msg_decode(payload);
-  ESP_LOGD(TAG, "rcv'd: len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=%02x, syst=%02x, chl=%02d, src=%s, bwd=%s, "
+  ESP_LOGD(TAG, "rcv'd: len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=0x%02x, syst=0x%02x, chl=%02d, src=%s, bwd=%s, "
                 "fwd=%s, #dst=%02d, dst=%s, rssi=%2.1f, lqi=%2d, crc=%2d, "
                 "payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]",
-           length, cnt, typ, typ2, hop, syst, chl, resolve_addr(src).c_str(), resolve_addr(bwd).c_str(),
-           resolve_addr(fwd).c_str(), num_dests, resolve_addr(dst).c_str(), rssi, lqi, crc, payload1, payload2,
-           payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7]);
+           length, cnt, typ, typ2, hop, syst, chl, this->resolve_addr(src).c_str(), this->resolve_addr(bwd).c_str(),
+           this->resolve_addr(fwd).c_str(), num_dests, this->resolve_addr(dst).c_str(), rssi, lqi, crc, payload1,
+           payload2, payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7]);
 
   if((typ == 0xca) || (typ == 0xc9)) { // Status message from a blind
     // Check if we know the blind
@@ -518,6 +520,18 @@ void Elero::interpret_msg() {
     auto search = this->address_to_cover_mapping_.find(src);
     if(search != this->address_to_cover_mapping_.end()) {
       search->second->set_rx_state(payload[6]);
+    }
+  } else { // commands from other remotes
+    auto search1 = this->address_to_cover_mapping_.find(src);
+    if(search1 != this->address_to_cover_mapping_.end()) {
+      search1->second->sync_remote_command(payload[2]);
+    } else {
+      auto search2 = this->channel_to_covers_mapping_.find(chl);
+      if(search2 != this->channel_to_covers_mapping_.end()) {
+        for (EleroCover* cover : search2->second) {
+          cover->sync_remote_command(payload[2]);
+        }
+      }
     }
   }
 }
@@ -533,6 +547,15 @@ void Elero::register_cover(EleroCover *cover) {
   // Spread out polling by 5 seconds per cover to avoid collisions
   cover->set_poll_offset((this->address_to_cover_mapping_.size() - 1) * 5000);
   ESP_LOGI(TAG, "Registered cover with address 0x%06x, poll offset: %d ms", address, (this->address_to_cover_mapping_.size() - 1) * 5000);
+
+  // create map of channel to covers
+  uint8_t channel = cover->get_channel();
+  auto search = this->channel_to_covers_mapping_.find(channel);
+  if (search != this->channel_to_covers_mapping_.end()) {
+    search->second.push_back(cover);
+  } else {
+    this->channel_to_covers_mapping_.insert({channel, {cover}});
+  }
 }
 
 bool Elero::send_command(t_elero_command *cmd) {
@@ -570,6 +593,13 @@ bool Elero::send_command(t_elero_command *cmd) {
   for (size_t i = 25; i <= this->msg_tx_[0]; i++) {
     this->msg_tx_[i] = 0x00;
   }
+
+  ESP_LOGVV(TAG, "encoding command %s (0x%02x) for blind %s, "
+                 "payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]",
+            EleroCover::command_to_string(cmd->command), cmd->command, this->resolve_addr(cmd->blind_addr).c_str(),
+            this->msg_tx_[20], this->msg_tx_[21], this->msg_tx_[22], this->msg_tx_[23], this->msg_tx_[24],
+            this->msg_tx_[25], this->msg_tx_[26], this->msg_tx_[27], this->msg_tx_[28], this->msg_tx_[29]);
+
   msg_encode(&this->msg_tx_[22]);
 
   ESP_LOGV(TAG,

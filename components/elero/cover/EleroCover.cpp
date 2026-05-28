@@ -30,8 +30,9 @@ void EleroCover::loop() {
     if((now - ELERO_TIMEOUT_MOVEMENT) < this->movement_start_) // do not poll frequently for an extended period of time
       intvl = ELERO_POLL_INTERVAL_MOVING;
   }
-
+  
   if((now > this->poll_offset_) && (now - this->poll_offset_ - this->last_poll_) > intvl) {
+    ESP_LOGVV(TAG, "'%s': Polling blind", this->name_.c_str());
     this->commands_to_send_.push(this->command_check_);
     this->last_poll_ = now - this->poll_offset_;
   }
@@ -84,7 +85,8 @@ void EleroCover::handle_commands(uint32_t now) {
         this->commands_to_send_.pop();
         this->increase_counter();
       } else {
-        ESP_LOGD(TAG, "Retry #%d for blind 0x%02x", this->send_retries_, this->command_.blind_addr);
+        ESP_LOGD(TAG, "Retry #%d for blind (%s) 0x%x", this->send_retries_, this->get_name().c_str(),
+                 this->command_.blind_addr);
         this->send_retries_++;
         if(this->send_retries_ > ELERO_SEND_RETRIES) {
           ESP_LOGE(TAG, "Hit maximum number of retries, giving up.");
@@ -113,7 +115,7 @@ cover::CoverTraits EleroCover::get_traits() {
 }
 
 void EleroCover::set_rx_state(uint8_t state) {
-  ESP_LOGV(TAG, "Got state: %s (0x%02x) for blind %s (0x%02x)", this->state_to_string(state), state,
+  ESP_LOGD(TAG, "Got state: %s (0x%02x) for blind %s (0x%x)", this->state_to_string(state), state,
            this->get_name().c_str(), this->command_.blind_addr);
   float pos = this->position;
   float current_tilt = this->tilt;
@@ -168,6 +170,52 @@ void EleroCover::increase_counter() {
     this->command_.counter += 1;
 }
 
+void EleroCover::sync_remote_command(uint8_t command) {
+  ESP_LOGV(TAG, "Got command: %s (0x%02x) for blind %s (0x%x)", this->command_to_string(command), command,
+           this->get_name().c_str(), this->command_.blind_addr);
+  float target_position = this->target_position_;
+  CoverOperation op = this->current_operation;
+
+  switch(command) {
+  case ELERO_COMMAND_COVER_STOP:
+  case ELERO_COMMAND_COVER_CHECK:
+    op = COVER_OPERATION_IDLE;
+    target_position = this->position;
+    break;
+  case ELERO_COMMAND_COVER_UP:
+  case ELERO_COMMAND_COVER_TILT:
+    if (op != COVER_OPERATION_OPENING) {
+      op = COVER_OPERATION_OPENING;
+      target_position = COVER_OPEN;
+    }
+    break;
+  case ELERO_COMMAND_COVER_DOWN:
+    if (op != COVER_OPERATION_CLOSING) {
+      op = COVER_OPERATION_CLOSING;
+      target_position = COVER_CLOSED;
+    }
+  case ELERO_COMMAND_COVER_CONTROL:
+  default:
+    // do nothing, keep current state
+    break;
+  }
+
+  if((op != this->current_operation) || (target_position != this->target_position_)) {
+    ESP_LOGV(TAG, "%s: Updating target pos: %f, op: %s from remote.", this->get_name().c_str(),
+             target_position, cover_operation_to_str(op));
+    this->target_position_ = target_position;
+    if (op != COVER_OPERATION_IDLE && op != this->current_operation) {
+      this->last_operation_ = op;
+      this->movement_start_ = millis();
+      this->last_poll_ = millis();
+      this->last_recompute_time_ = millis();
+    }
+    this->current_operation = op;
+    this->publish_state();
+    this->last_publish_ = millis();
+  }
+}
+
 void EleroCover::control(const cover::CoverCall &call) {
   if (call.get_stop()) {
     this->start_movement(COVER_OPERATION_IDLE);
@@ -211,20 +259,21 @@ void EleroCover::control(const cover::CoverCall &call) {
 void EleroCover::start_movement(CoverOperation dir) {
   switch(dir) {
     case COVER_OPERATION_OPENING:
-      ESP_LOGV(TAG, "Sending OPEN command");
+      ESP_LOGV(TAG, "'%s': Sending OPEN command", this->name_.c_str());
       this->commands_to_send_.push(this->command_up_);
       // Reset tilt state on movement
       this->tilt = 0.0;
       this->last_operation_ = COVER_OPERATION_OPENING;
     break;
     case COVER_OPERATION_CLOSING:
-      ESP_LOGV(TAG, "Sending CLOSE command");
+      ESP_LOGV(TAG, "'%s': Sending CLOSE command", this->name_.c_str());
       this->commands_to_send_.push(this->command_down_);
       // Reset tilt state on movement
       this->tilt = 0.0;
       this->last_operation_ = COVER_OPERATION_CLOSING;
     break;
     case COVER_OPERATION_IDLE:
+      ESP_LOGV(TAG, "'%s': Sending STOP command", this->name_.c_str());
       this->commands_to_send_.push(this->command_stop_);
     break;
   }
@@ -241,7 +290,6 @@ void EleroCover::start_movement(CoverOperation dir) {
 void EleroCover::recompute_position() {
   if(this->current_operation == COVER_OPERATION_IDLE)
     return;
-
 
   float dir;
   float action_dur;
@@ -263,11 +311,9 @@ void EleroCover::recompute_position() {
   this->position = clamp(this->position, 0.0f, 1.0f);
 
   this->last_recompute_time_ = now;
-
 }
 
-const char *EleroCover::command_to_string(uint8_t command)
-{
+const char *EleroCover::command_to_string(uint8_t command) {
   switch (command)
   {
   case ELERO_COMMAND_COVER_CONTROL:
@@ -288,8 +334,7 @@ const char *EleroCover::command_to_string(uint8_t command)
   return "???";
 }
 
-const char *EleroCover::state_to_string(uint8_t state)
-{
+const char *EleroCover::state_to_string(uint8_t state) {
   switch (state)
   {
   case ELERO_STATE_UNKNOWN:

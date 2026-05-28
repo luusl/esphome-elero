@@ -5,6 +5,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/components/spi/spi.h"
 #include "esphome/components/elero/cc1101.h"
+#include <list>
 
 // All encryption/decryption structures copied from https://github.com/QuadCorei8085/elero_protocol/ (MIT)
 // All remote handling based on code from https://github.com/stanleypa/eleropy (GPLv3)
@@ -67,6 +68,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void set_freq0(uint8_t freq) { freq0_ = freq; }
   void set_freq1(uint8_t freq) { freq1_ = freq; }
   void set_freq2(uint8_t freq) { freq2_ = freq; }
+  void add_remote(uint32_t address, const std::string& name) { custom_remotes_mapping_.emplace(address, name); }
 
  private:
   uint8_t count_bits(uint8_t byte);
@@ -81,7 +83,6 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void msg_encode(uint8_t* msg);
   std::string resolve_addr(uint32_t addr) const;
  
- 
   bool received_{false};
   bool transmitting_{false};
   uint32_t tx_start_time_{0};
@@ -93,6 +94,8 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   InternalGPIOPin *gdo0_pin_{nullptr};
   ISRInternalGPIOPin gdo0_irq_pin_{nullptr};
   std::map<uint32_t, EleroCover*> address_to_cover_mapping_;
+  std::map<uint32_t, std::string> custom_remotes_mapping_;
+  std::map<uint8_t, std::list<EleroCover*>> channel_to_covers_mapping_;
   Mutex radio_mutex_;
 };
 
