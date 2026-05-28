@@ -164,10 +164,9 @@ void EleroCover::set_rx_state(uint8_t state) {
 }
 
 void EleroCover::increase_counter() {
-  if(this->command_.counter == 0xff)
-    this->command_.counter = 1;
-  else
-    this->command_.counter += 1;
+  do {
+    this->command_.counter++;
+  } while (!this->command_.counter);
 }
 
 void EleroCover::sync_remote_command(uint8_t command) {
@@ -307,8 +306,10 @@ void EleroCover::recompute_position() {
   }
 
   const uint32_t now = millis();
-  this->position += dir * (now - this->last_recompute_time_) / action_dur;
-  this->position = clamp(this->position, 0.0f, 1.0f);
+  if (action_dur > 0) {
+    this->position += dir * (now - this->last_recompute_time_) / action_dur;
+    this->position = clamp(this->position, COVER_CLOSED, COVER_OPEN);
+  }
 
   this->last_recompute_time_ = now;
 }

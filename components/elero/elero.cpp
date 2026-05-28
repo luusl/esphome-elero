@@ -51,7 +51,7 @@ IRAM_ATTR void Elero::interrupt(Elero *arg) {
   arg->set_received();
 }
 
-void IRAM_ATTR Elero::set_received() {
+IRAM_ATTR void Elero::set_received() {
   // Only set received flag if we're not transmitting to avoid race conditions
   if (!this->transmitting_) {
     this->received_ = true;
@@ -350,8 +350,7 @@ void Elero::add_r20_to_nibbles(uint8_t* msg, uint8_t r20, uint8_t start, uint8_t
 {
   uint8_t i;
 
-  for( i = 0; i < 8; i++ )
-  {
+  for (i = start; i < length; i++) {
     uint8_t d = msg[i];
 
     uint8_t ln = (d + r20) & 0x0F;
